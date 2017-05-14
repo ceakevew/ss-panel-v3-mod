@@ -168,6 +168,7 @@ $app->group('/auth', function () {
 $app->group('/password', function () {
     $this->get('/reset', 'App\Controllers\PasswordController:reset');
     $this->post('/reset', 'App\Controllers\PasswordController:handleReset');
+    $this->post('/gentoken', 'App\Controllers\PasswordController:genToken');
     $this->get('/token/{token}', 'App\Controllers\PasswordController:token');
     $this->post('/token/{token}', 'App\Controllers\PasswordController:handleToken');
 })->add(new Guest());
@@ -287,6 +288,8 @@ $app->group('/api', function () {
     $this->post('/token', 'App\Controllers\ApiController:newToken');
     $this->get('/node', 'App\Controllers\ApiController:node')->add(new Api());
     $this->get('/user/{id}', 'App\Controllers\ApiController:userInfo')->add(new Api());
+    $this->get('/shop', 'App\Controllers\ApiController:getShop');
+    $this->post('/buy', 'App\Controllers\ApiController:buy');
 });
 
 // mu

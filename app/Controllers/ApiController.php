@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Models\InviteCode;
 use App\Models\Node;
 use App\Models\User;
+use App\Models\Shop;
+use App\Models\Bought;
 use App\Services\Factory;
 use App\Services\Config;
 use App\Utils\Tools;
@@ -97,7 +99,12 @@ class ApiController extends BaseController
         $temparray=array();
         foreach ($nodes as $node) {
             if ($node->mu_only == 0) {
-                array_push($temparray, array("remarks"=>$node->name,
+                /*
+                 * 增加 在线人数、speedtest、heartbeat
+                 */
+
+                array_push($temparray, array("id"=>$node->id,
+                                            "remarks"=>$node->name,
                                             "server"=>$node->server,
                                             "server_port"=>$user->port,
                                             "method"=>($node->custom_method==1?$user->method:$node->method),
@@ -110,7 +117,13 @@ class ApiController extends BaseController
                                             "group"=>Config::get('appName'),
                                             "protocol"=>str_replace("_compatible", "", (($node->custom_rss==1&&!($user->obfs=='plain'&&$user->protocol=='origin'))?$user->protocol:"origin")),
                                             "obfs_udp"=>false,
-                                            "enable"=>true));
+                                            "enable"=>true,
+                                            "is_online"=>$node->isNodeOnline(),
+                                            "user_count"=>$node->getOnlineUserCount(),
+                                            "heartbeat"=>$node->node_heartbeat,
+                                            "speed_test"=>$node->getSpeedtestResult()
+
+                    ));
             }
             
             if ($node->custom_rss == 1) {
@@ -141,6 +154,76 @@ class ApiController extends BaseController
         $res['data'] = $temparray;
         return $this->echoJson($response, $res);
     }
+
+    public function getShop($request, $response, $args){
+
+        $temparray=array();
+        $shops = Shop::where("status", 1);
+        foreach ($shops as $shop) {
+            $content = $shop->content;
+            array_push($temparray, array(
+                "id"=>$shop->id,
+                "name"=>$shop->name,
+                "price"=>$shop->price,
+                "bandwidth"=>$content->bandwidth,
+                "expire"=>$content->expire
+            ));
+        }
+        $res['ret'] = 1;
+        $res['msg'] = "ok";
+        $res['data'] = $temparray;
+        return $this->echoJson($response, $res);
+
+    }
+
+
+    public function buy($request, $response, $args)
+    {
+
+        $id = $request->getParam('id');
+        $shopID = $request->getParam('shopid');
+
+        $accessToken = Helper::getTokenFromReq($request);
+        $storage = Factory::createTokenStorage();
+        $token = $storage->get($accessToken);
+        if ($id != $token->userId) {
+            $res['ret'] = 0;
+            $res['msg'] = "access denied";
+            return $this->echoJson($response, $res);
+        }
+        $user = User::find($token->userId);
+        $shop=Shop::where("id", $shopID)->where("status", 1)->first();
+
+        if ($shop==null) {
+            $res['ret'] = 0;
+            $res['msg'] = "商品代码没有输入";
+            return $response->getBody()->write(json_encode($res));
+        }
+
+        $price=$shop->price;
+
+        $bought=new Bought();
+        $bought->userid=$id;
+        $bought->shopid=$shop->id;
+        $bought->datetime=time();
+        if ($shop->auto_renew==0) {
+            $bought->renew=0;
+        } else {
+            $bought->renew=time()+$shop->auto_renew*86400;
+        }
+
+        $bought->price=$price;
+        $bought->save();
+
+        $shop->buy($user);
+
+        $res['ret'] = 1;
+        $res['msg'] = "购买成功";
+
+        return $response->getBody()->write(json_encode($res));
+    }
+
+
 
     public function userInfo($request, $response, $args)
     {
